@@ -3,6 +3,7 @@ from openai import OpenAI
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import markdown  # Libreria per convertire il Markdown in HTML pulito per l'email
 
 st.set_page_config(page_title="Squadra Agenti IA Didattica", page_icon="🤖", layout="centered")
 
@@ -14,7 +15,6 @@ with st.sidebar:
     st.header("⚙️ Configurazione")
     api_key = st.text_input("OpenRouter API Key", type="password")
     
-    # Scelta del modello per non dipendere solo da 'openrouter/auto'
     modello_scelto = st.selectbox(
         "Modello OpenRouter",
         [
@@ -40,7 +40,6 @@ if st.button("🚀 1. Avvia la Squadra di Agenti", type="primary"):
     elif not tema:
         st.error("⚠️ Inserisci un tema valido.")
     else:
-        # Inizializziamo il client OpenAI puntando a OpenRouter
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key
@@ -78,6 +77,7 @@ if st.button("🚀 1. Avvia la Squadra di Agenti", type="primary"):
                         messages=[{"role": "user", "content": prompt_scrittura}]
                     )
                     post_bozza = res2.choices[0].message.content
+                    st.session_state['post_bozza'] = post_bozza
                 except Exception as e:
                     st.error(f"Errore Agente 2: {e}")
                     post_bozza = None
@@ -100,27 +100,35 @@ if st.button("🚀 1. Avvia la Squadra di Agenti", type="primary"):
                         st.session_state['post_finale'] = post_finale
                     except Exception as e:
                         st.error(f"Errore Agente 3: {e}")
-                        # Fallback se l'editor fallisce ma abbiamo la bozza
                         st.session_state['post_finale'] = post_bozza
 
-# Mostra i risultati se presenti nella sessione
+# --- VISUALIZZAZIONE DEI RISULTATI ---
 if 'punti_chiave' in st.session_state:
     st.markdown("---")
     st.subheader("🔍 1. Analisi (Ricercatore)")
     st.markdown(st.session_state['punti_chiave'])
 
+if 'post_bozza' in st.session_state:
+    st.subheader("✍️ 2. Prima Bozza (Scrittore)")
+    st.write(st.session_state['post_bozza'])
+
 if 'post_finale' in st.session_state:
-    st.subheader("✍️ 2. Post Ottimizzato (Scrittore + Editor)")
+    st.subheader("🎯 3. Post Revisionato e Ottimizzato (Editor)")
     st.info(st.session_state['post_finale'])
     
-    # Sezione invio email visibile solo dopo la generazione
+    # Sezione invio email
     st.markdown("---")
-    if st.button("📧 3. Invia Report via Email"):
+    if st.button("📧 2. Invia Report via Email", type="primary"):
         if not mittente or not password_app or not destinatario:
-            st.error("⚠️ Compila tutti i campi email nella barra laterale (Mittente, App Password e Destinatario).")
+            st.error("⚠️ Compila tutti i campi email nella barra laterale.")
         else:
             with st.spinner("⏳ Invio email in corso..."):
                 try:
+                    # Conversione da Markdown ad HTML vero per l'email
+                    html_punti_chiave = markdown.markdown(st.session_state['punti_chiave'])
+                    html_post_bozza = markdown.markdown(st.session_state['post_bozza'])
+                    html_post_finale = markdown.markdown(st.session_state['post_finale'])
+                    
                     msg = MIMEMultipart()
                     msg['From'] = mittente
                     msg['To'] = destinatario
@@ -132,14 +140,21 @@ if 'post_finale' in st.session_state:
                         <h2 style="color: #1a73e8;">Report Generato dalla Squadra di Agenti IA</h2>
                         <p><strong>Tema trattato:</strong> {tema}</p>
                         <hr>
-                        <h3 style="color: #3c4043;">🔍 Punti Chiave (Ricercatore)</h3>
+                        <h3 style="color: #3c4043;">🔍 1. Punti Chiave (Ricercatore)</h3>
                         <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #dadce0; border-radius: 4px;">
-                          {st.session_state['punti_chiave'].replace(chr(10), '<br>')}
+                          {html_punti_chiave}
                         </div>
-                        <h3 style="color: #3c4043; margin-top: 20px;">✍️ Post Divulgativo (Editor)</h3>
+                        
+                        <h3 style="color: #3c4043; margin-top: 20px;">✍️ 2. Prima Bozza (Scrittore)</h3>
+                        <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; border-radius: 4px;">
+                          {html_post_bozza}
+                        </div>
+                        
+                        <h3 style="color: #3c4043; margin-top: 20px;">🎯 3. Versione Finale Revisionata (Editor)</h3>
                         <div style="background: #e8f0fe; padding: 15px; border-left: 4px solid #1a73e8; border-radius: 4px;">
-                          {st.session_state['post_finale'].replace(chr(10), '<br>')}
+                          {html_post_finale}
                         </div>
+                        
                         <hr style="margin-top: 25px;">
                         <p style="font-size: 0.8em; color: #777;">Generato tramite Web App Streamlit e OpenRouter.</p>
                       </body>
